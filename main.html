@@ -3,66 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>4択クイズBot (自動読み込み版)</title>
+    <title>4択クイズBot</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        :root {
-            --primary-color: #4a90e2;
-            --success-color: #2ecc71;
-            --error-color: #e74c3c;
-            --bg-color: #f5f7fa;
-        }
-        body {
-            font-family: sans-serif;
-            background-color: var(--bg-color);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        #quiz-container {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            width: 90%;
-            max-width: 600px;
-        }
+        :root { --primary-color: #4a90e2; --bg-color: #f5f7fa; }
+        body { font-family: sans-serif; background-color: var(--bg-color); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        #quiz-container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 600px; }
         .header { display: flex; justify-content: space-between; margin-bottom: 1rem; color: #666; }
-        .question-text { font-size: 1.2rem; font-weight: bold; margin-bottom: 1.5rem; line-height: 1.6; }
+        .question-text { font-size: 1.2rem; font-weight: bold; margin-bottom: 1.5rem; }
         .options-grid { display: grid; gap: 10px; }
-        button.option-btn {
-            background: white; border: 2px solid #ddd; padding: 1rem;
-            border-radius: 8px; cursor: pointer; text-align: left; transition: 0.2s;
-        }
-        button.option-btn:hover { background-color: #f0f7ff; border-color: var(--primary-color); }
-        .feedback { margin-top: 1.5rem; padding: 1rem; border-radius: 8px; display: none; }
-        .feedback.correct { display: block; background-color: #d4edda; color: #155724; }
-        .feedback.wrong { display: block; background-color: #f8d7da; color: #721c24; }
-        .next-btn, .retry-btn {
-            margin-top: 1.5rem; width: 100%; padding: 1rem;
-            background-color: var(--primary-color); color: white;
-            border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
-        }
+        button { padding: 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
+        .option-btn { background: white; border: 2px solid #ddd; text-align: left; }
+        .option-btn:hover { background-color: #f0f7ff; border-color: var(--primary-color); }
+        .next-btn, .retry-btn { background-color: var(--primary-color); color: white; width: 100%; margin-top: 1rem; }
+        .feedback { margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none; }
+        .correct { background-color: #d4edda; color: #155724; }
+        .wrong { background-color: #f8d7da; color: #721c24; }
         .hidden { display: none; }
+        .menu-item { display: block; width: 100%; padding: 0.8rem; margin-bottom: 0.5rem; background: #eee; text-align: left; border-radius: 5px; text-decoration: none; color: #333; }
     </style>
 </head>
 <body>
 
 <div id="quiz-container">
     <div id="setup-screen">
-        <h2>クイズBot</h2>
-        <p id="status-msg">ファイルをスキャン中...</p>
-        <div id="file-list-display" style="font-size: 0.8rem; color: #888; margin-bottom: 1rem;"></div>
-        <button class="next-btn" id="start-btn" disabled>開始する</button>
+        <h2 id="title">クイズを選択</h2>
+        <div id="status-msg">読み込み中...</div>
+        <div id="file-menu" style="margin-top: 1rem;"></div>
+        <button class="next-btn hidden" id="start-btn">このクイズを開始</button>
     </div>
 
     <div id="game-screen" class="hidden">
-        <div class="header">
-            <span id="progress">0 / 0</span>
-            <span id="score-display">スコア: 0</span>
-        </div>
+        <div class="header"><span id="progress"></span><span id="score-display"></span></div>
         <div class="question-text" id="question"></div>
         <div class="options-grid" id="options-container"></div>
         <div id="feedback-area" class="feedback">
@@ -73,7 +45,7 @@
     </div>
 
     <div id="result-screen" class="result-screen hidden">
-        <h2 style="text-align:center">結果発表</h2>
+        <h2 style="text-align:center">結果</h2>
         <p style="text-align:center; font-size: 2rem;"><span id="final-score">0</span> / <span id="total-questions">0</span></p>
         <button class="retry-btn" id="retry-wrong-btn">間違えた問題のみリトライ</button>
         <button class="retry-btn" id="restart-btn" style="background-color: #95a5a6;">最初から解き直す</button>
@@ -81,11 +53,11 @@
 </div>
 
 <script>
-    // --- 【設定】ここを書き換えてください ---
-    const GITHUB_USER = 'ooaaoaoaoaoa'; // GitHubのユーザー名
-    const GITHUB_REPO = 'te';      // リポジトリ名
-    const FOLDER_PATH = '';                // 空にすると「同じディレクトリ」を指します
-    // ------------------------------------
+    // --- 【設定】 ---
+    const GITHUB_USER = 'ooaaoaoaoaoa'; 
+    const GITHUB_REPO = 'te';
+    const FOLDER_PATH = ''; // 同じディレクトリ
+    // ----------------
 
     let allQuestions = [];
     let currentQuestions = [];
@@ -93,57 +65,63 @@
     let score = 0;
     let wrongQuestions = [];
 
-    // 1. GitHub APIを使用してフォルダ内のCSV一覧を取得
     async function init() {
+        const hash = window.location.hash.replace('#', ''); // URLの#以降を取得
         const statusMsg = document.getElementById('status-msg');
-        const fileListDisplay = document.getElementById('file-list-display');
-        
+        const menu = document.getElementById('file-menu');
+
         try {
             const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
             const response = await fetch(apiUrl);
-            
-            if (!response.ok) throw new Error('フォルダが見つからないか、API制限です');
-            
             const files = await response.json();
-            const csvFiles = files.filter(f => f.name.endsWith('.csv'));
+            const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
 
-            if (csvFiles.length === 0) {
-                statusMsg.innerText = "CSVファイルが見つかりません。";
-                return;
+            if (hash) {
+                // ハッシュがある場合：そのファイルだけ読み込んで即開始
+                const targetFile = csvFiles.find(f => f.name.replace('.csv', '') === hash);
+                if (targetFile) {
+                    statusMsg.innerText = `「${hash}」を読み込んでいます...`;
+                    await loadCSV(targetFile.download_url);
+                    startQuiz(allQuestions);
+                } else {
+                    statusMsg.innerText = `エラー: ${hash}.csv が見つかりません。`;
+                    showMenu(csvFiles);
+                }
+            } else {
+                // ハッシュがない場合：メニューを表示
+                statusMsg.innerText = "解きたいクイズを選んでください：";
+                showMenu(csvFiles);
             }
-
-            fileListDisplay.innerText = "読み込み対象: " + csvFiles.map(f => f.name).join(', ');
-
-            for (const file of csvFiles) {
-                await loadCSV(file.download_url);
-            }
-
-            statusMsg.innerText = `${allQuestions.length} 問の準備ができました。`;
-            document.getElementById('start-btn').disabled = false;
-
         } catch (e) {
-            statusMsg.innerText = "エラー: フォルダを読み込めませんでした。";
-            console.error(e);
+            statusMsg.innerText = "エラー: 読み込みに失敗しました。";
         }
     }
 
-    // 2. CSVファイルを読み込んでパース
+    function showMenu(files) {
+        const menu = document.getElementById('file-menu');
+        files.forEach(f => {
+            const name = f.name.replace('.csv', '');
+            const btn = document.createElement('a');
+            btn.href = `#${name}`;
+            btn.className = 'menu-item';
+            btn.innerText = `📄 ${name}`;
+            btn.onclick = () => { setTimeout(() => location.reload(), 10); };
+            menu.appendChild(btn);
+        });
+    }
+
     async function loadCSV(url) {
         const resp = await fetch(url);
         const text = await resp.text();
         const results = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: true });
-        
-        const formatted = results.data.map(row => ({
+        allQuestions = results.data.map(row => ({
             question: row['問題文'],
             options: [row['選択肢1'], row['選択肢2'], row['選択肢3'], row['選択肢4']],
             answer: parseInt(row['正解']),
             explanation: row['解説']
         })).filter(q => q.question);
-
-        allQuestions = allQuestions.concat(formatted);
     }
 
-    // クイズの制御ロジック
     function startQuiz(qs) {
         currentQuestions = [...qs];
         currentIndex = 0; score = 0; wrongQuestions = [];
@@ -167,8 +145,7 @@
             btn.className = 'option-btn';
             btn.innerText = opt;
             btn.onclick = () => {
-                const btns = container.querySelectorAll('button');
-                btns.forEach(b => b.disabled = true);
+                container.querySelectorAll('button').forEach(b => b.disabled = true);
                 const isCorrect = (i + 1) === q.answer;
                 if (isCorrect) {
                     score++;
@@ -194,11 +171,10 @@
             document.getElementById('result-screen').classList.remove('hidden');
             document.getElementById('final-score').innerText = score;
             document.getElementById('total-questions').innerText = currentQuestions.length;
-            document.getElementById('retry-wrong-btn').style.display = wrongQuestions.length ? 'block' : 'none';
+            document.getElementById('retry-wrong-btn').classList.toggle('hidden', !wrongQuestions.length);
         }
     };
 
-    document.getElementById('start-btn').onclick = () => startQuiz(allQuestions);
     document.getElementById('restart-btn').onclick = () => startQuiz(allQuestions);
     document.getElementById('retry-wrong-btn').onclick = () => startQuiz(wrongQuestions);
 
