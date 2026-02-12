@@ -3,139 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>4択クイズBot</title>
+    <title>4択クイズBot (オートセーブ & 章対応)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        :root { --primary-color: #4a90e2; --bg-color: #f5f7fa; }
+        :root { --primary-color: #4a90e2; --bg-color: #f5f7fa; --accent-color: #f39c12; }
         body { font-family: sans-serif; background-color: var(--bg-color); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         #quiz-container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 600px; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 1rem; color: #666; }
-        .question-text { font-size: 1.2rem; font-weight: bold; margin-bottom: 1.5rem; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 1rem; color: #666; font-size: 0.9rem; }
+        .question-text { font-size: 1.1rem; font-weight: bold; margin-bottom: 1.5rem; line-height: 1.5; }
         .options-grid { display: grid; gap: 10px; }
         button { padding: 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
-        .option-btn { background: white; border: 2px solid #ddd; text-align: left; }
-        .option-btn:hover { background-color: #f0f7ff; border-color: var(--primary-color); }
-        .next-btn, .retry-btn { background-color: var(--primary-color); color: white; width: 100%; margin-top: 1rem; }
+        .option-btn { background: white; border: 2px solid #ddd; text-align: left; font-size: 0.95rem; }
+        .option-btn:hover:not(:disabled) { background-color: #f0f7ff; border-color: var(--primary-color); }
+        .next-btn, .action-btn { background-color: var(--primary-color); color: white; width: 100%; margin-top: 1rem; }
+        .resume-btn { background-color: var(--accent-color); color: white; width: 100%; margin-bottom: 1rem; }
         .feedback { margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none; }
         .correct { background-color: #d4edda; color: #155724; }
         .wrong { background-color: #f8d7da; color: #721c24; }
         .hidden { display: none; }
-        .menu-item { display: block; width: 100%; padding: 0.8rem; margin-bottom: 0.5rem; background: #eee; text-align: left; border-radius: 5px; text-decoration: none; color: #333; }
+        .menu-item { display: block; width: 100%; padding: 0.8rem; margin-bottom: 0.5rem; background: #fff; border: 1px solid #ddd; text-align: left; border-radius: 5px; text-decoration: none; color: #333; }
+        .menu-item:hover { background: #f9f9f9; }
+        .badge { font-size: 0.7rem; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
     </style>
 </head>
 <body>
 
 <div id="quiz-container">
     <div id="setup-screen">
-        <h2 id="title">クイズを選択</h2>
+        <h2 id="setup-title">クイズを選択</h2>
+        <div id="resume-area" class="hidden">
+            <p style="color: var(--accent-color); font-weight: bold;">前回の続きがあります</p>
+            <button class="resume-btn" id="resume-game-btn">続きから再開する</button>
+            <hr>
+        </div>
         <div id="status-msg">読み込み中...</div>
-        <div id="file-menu" style="margin-top: 1rem;"></div>
-        <button class="next-btn hidden" id="start-btn">このクイズを開始</button>
+        <div id="menu-content"></div>
     </div>
 
     <div id="game-screen" class="hidden">
-        <div class="header"><span id="progress"></span><span id="score-display"></span></div>
+        <div class="header">
+            <div><span id="chapter-label" style="font-weight:bold; margin-right:10px;"></span> <span id="progress"></span></div>
+            <span id="score-display"></span>
+        </div>
         <div class="question-text" id="question"></div>
         <div class="options-grid" id="options-container"></div>
         <div id="feedback-area" class="feedback">
             <b id="result-label"></b>
-            <div id="explanation-text" style="margin-top:0.5rem; font-size:0.9rem;"></div>
+            <div id="explanation-text" style="margin-top:0.5rem; font-size:0.85rem; white-space: pre-wrap;"></div>
             <button class="next-btn" id="next-question-btn">次へ</button>
         </div>
     </div>
 
-    <div id="result-screen" class="result-screen hidden">
-        <h2 style="text-align:center">結果</h2>
+    <div id="result-screen" class="hidden">
+        <h2 style="text-align:center">結果発表</h2>
         <p style="text-align:center; font-size: 2rem;"><span id="final-score">0</span> / <span id="total-questions">0</span></p>
-        <button class="retry-btn" id="retry-wrong-btn">間違えた問題のみリトライ</button>
-        <button class="retry-btn" id="restart-btn" style="background-color: #95a5a6;">最初から解き直す</button>
+        <button class="action-btn" id="retry-wrong-btn">間違えた問題のみリトライ</button>
+        <button class="action-btn" id="restart-btn" style="background-color: #95a5a6;">最初から解き直す</button>
+        <button class="action-btn" id="back-to-menu-btn" style="background-color: #7f8c8d;">メニューに戻る</button>
     </div>
 </div>
 
 <script>
-    // --- 【設定】 ---
     const GITHUB_USER = 'ooaaoaoaoaoa'; 
     const GITHUB_REPO = 'te';
-    const FOLDER_PATH = ''; // 同じディレクトリ
-    // ----------------
+    const SAVE_KEY = 'quiz_bot_save_data';
 
-    let allQuestions = [];
-    let currentQuestions = [];
+    let allQuestions = [];      // そのファイル全問
+    let filteredQuestions = []; // 章などで絞り込んだ問題
+    let currentQuestions = [];  // 現在のセッション用
     let currentIndex = 0;
     let score = 0;
     let wrongQuestions = [];
+    let currentFileName = "";
+    let currentChapter = "";
 
+    const setupScreen = document.getElementById('setup-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const menuContent = document.getElementById('menu-content');
+    const statusMsg = document.getElementById('status-msg');
+
+    // 1. 初期化: セーブ確認とファイル一覧取得
     async function init() {
-        const hash = window.location.hash.replace('#', ''); // URLの#以降を取得
-        const statusMsg = document.getElementById('status-msg');
-        const menu = document.getElementById('file-menu');
+        const savedData = localStorage.getItem(SAVE_KEY);
+        if (savedData) {
+            document.getElementById('resume-area').classList.remove('hidden');
+        }
 
+        const hash = window.location.hash.replace('#', '');
         try {
-            const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
+            const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/`;
             const response = await fetch(apiUrl);
             const files = await response.json();
             const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
 
             if (hash) {
-                // ハッシュがある場合：そのファイルだけ読み込んで即開始
-                const targetFile = csvFiles.find(f => f.name.replace('.csv', '') === hash);
-                if (targetFile) {
-                    statusMsg.innerText = `「${hash}」を読み込んでいます...`;
-                    await loadCSV(targetFile.download_url);
-                    startQuiz(allQuestions);
-                } else {
-                    statusMsg.innerText = `エラー: ${hash}.csv が見つかりません。`;
-                    showMenu(csvFiles);
+                // 特定のファイルが指定されている場合、その中の章リストを表示
+                const target = csvFiles.find(f => f.name.replace('.csv', '') === decodeURIComponent(hash));
+                if (target) {
+                    currentFileName = target.name;
+                    await loadFileAndShowChapters(target.download_url);
                 }
             } else {
-                // ハッシュがない場合：メニューを表示
-                statusMsg.innerText = "解きたいクイズを選んでください：";
-                showMenu(csvFiles);
+                showFileMenu(csvFiles);
             }
         } catch (e) {
             statusMsg.innerText = "エラー: 読み込みに失敗しました。";
         }
     }
 
-    function showMenu(files) {
-        const menu = document.getElementById('file-menu');
+    // 2. ファイル一覧表示
+    function showFileMenu(files) {
+        statusMsg.innerText = "解きたいファイルを選んでください：";
+        menuContent.innerHTML = '';
         files.forEach(f => {
             const name = f.name.replace('.csv', '');
-            const btn = document.createElement('a');
-            btn.href = `#${name}`;
-            btn.className = 'menu-item';
-            btn.innerText = `📄 ${name}`;
-            btn.onclick = () => { setTimeout(() => location.reload(), 10); };
-            menu.appendChild(btn);
+            const a = document.createElement('a');
+            a.href = `#${encodeURIComponent(name)}`;
+            a.className = 'menu-item';
+            a.innerText = `📄 ${name}`;
+            a.onclick = () => setTimeout(() => location.reload(), 10);
+            menuContent.appendChild(a);
         });
     }
 
-    async function loadCSV(url) {
+    // 3. ファイルを読み込み、章の選択肢を表示
+    async function loadFileAndShowChapters(url) {
+        statusMsg.innerText = "章を確認中...";
         const resp = await fetch(url);
         const text = await resp.text();
         const results = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: true });
+        
         allQuestions = results.data.map(row => ({
             question: row['問題文'],
             options: [row['選択肢1'], row['選択肢2'], row['選択肢3'], row['選択肢4']],
             answer: parseInt(row['正解']),
-            explanation: row['解説']
+            explanation: row['解説'],
+            chapter: String(row['章'] || "その他")
         })).filter(q => q.question);
+
+        const chapters = [...new Set(allQuestions.map(q => q.chapter))];
+        
+        document.getElementById('setup-title').innerText = "章を選択";
+        statusMsg.innerText = "";
+        menuContent.innerHTML = '';
+
+        // 「すべて解く」
+        const allBtn = document.createElement('button');
+        allBtn.className = 'menu-item';
+        allBtn.innerHTML = `🌟 <strong>全章まとめて解く</strong> <span class="badge">${allQuestions.length}問</span>`;
+        allBtn.onclick = () => startQuiz(allQuestions, "全章");
+        menuContent.appendChild(allBtn);
+
+        // 章ごとのボタン
+        chapters.forEach(ch => {
+            const count = allQuestions.filter(q => q.chapter === ch).length;
+            const btn = document.createElement('button');
+            btn.className = 'menu-item';
+            btn.innerHTML = `第 ${ch} 章 <span class="badge">${count}問</span>`;
+            btn.onclick = () => startQuiz(allQuestions.filter(q => q.chapter === ch), `第 ${ch} 章`);
+            menuContent.appendChild(btn);
+        });
     }
 
-    function startQuiz(qs) {
+    // 4. クイズ開始（新規）
+    function startQuiz(qs, chapterName) {
         currentQuestions = [...qs];
         currentIndex = 0; score = 0; wrongQuestions = [];
-        document.getElementById('setup-screen').classList.add('hidden');
-        document.getElementById('result-screen').classList.add('hidden');
-        document.getElementById('game-screen').classList.remove('hidden');
+        currentChapter = chapterName;
+        
+        setupScreen.classList.add('hidden');
+        resultScreen.classList.add('hidden');
+        gameScreen.classList.remove('hidden');
         showQuestion();
     }
 
+    // 5. 問題表示
     function showQuestion() {
+        saveProgress(); // 毎回セーブ
         const q = currentQuestions[currentIndex];
+        document.getElementById('chapter-label').innerText = currentChapter;
         document.getElementById('progress').innerText = `${currentIndex + 1} / ${currentQuestions.length}`;
         document.getElementById('score-display').innerText = `スコア: ${score}`;
         document.getElementById('question').innerText = q.question;
+        
         const container = document.getElementById('options-container');
         container.innerHTML = '';
         document.getElementById('feedback-area').style.display = 'none';
@@ -163,20 +214,68 @@
         });
     }
 
+    // 6. 次へ
     document.getElementById('next-question-btn').onclick = () => {
         currentIndex++;
-        if (currentIndex < currentQuestions.length) showQuestion();
-        else {
-            document.getElementById('game-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.remove('hidden');
-            document.getElementById('final-score').innerText = score;
-            document.getElementById('total-questions').innerText = currentQuestions.length;
-            document.getElementById('retry-wrong-btn').classList.toggle('hidden', !wrongQuestions.length);
+        if (currentIndex < currentQuestions.length) {
+            showQuestion();
+        } else {
+            showResults();
         }
     };
 
-    document.getElementById('restart-btn').onclick = () => startQuiz(allQuestions);
-    document.getElementById('retry-wrong-btn').onclick = () => startQuiz(wrongQuestions);
+    function showResults() {
+        localStorage.removeItem(SAVE_KEY); // 終わったらセーブ消去
+        gameScreen.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+        document.getElementById('final-score').innerText = score;
+        document.getElementById('total-questions').innerText = currentQuestions.length;
+        document.getElementById('retry-wrong-btn').classList.toggle('hidden', !wrongQuestions.length);
+    }
+
+    // セーブ・ロード機能
+    function saveProgress() {
+        const data = {
+            fileName: currentFileName,
+            chapter: currentChapter,
+            questions: currentQuestions,
+            currentIndex: currentIndex,
+            score: score,
+            wrongQuestions: wrongQuestions,
+            urlHash: window.location.hash
+        };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    }
+
+    document.getElementById('resume-game-btn').onclick = () => {
+        const data = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if (data) {
+            // 現在のハッシュと保存時のハッシュが違う場合はリダイレクトしてリロード
+            if (window.location.hash !== data.urlHash) {
+                window.location.hash = data.urlHash;
+                location.reload();
+                return;
+            }
+            currentFileName = data.fileName;
+            currentChapter = data.chapter;
+            currentQuestions = data.questions;
+            currentIndex = data.currentIndex;
+            score = data.score;
+            wrongQuestions = data.wrongQuestions;
+
+            setupScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            showQuestion();
+        }
+    };
+
+    // その他ボタン
+    document.getElementById('restart-btn').onclick = () => startQuiz(currentQuestions, currentChapter);
+    document.getElementById('retry-wrong-btn').onclick = () => startQuiz(wrongQuestions, "リトライ");
+    document.getElementById('back-to-menu-btn').onclick = () => {
+        window.location.hash = "";
+        location.reload();
+    };
 
     init();
 </script>
